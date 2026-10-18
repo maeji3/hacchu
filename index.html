@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>発注管理</title>
 <meta name="apple-mobile-web-app-title" content="発注管理">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" href="favicon.png">
 <meta name="theme-color" content="#e3f0ee">
@@ -13,17 +16,18 @@
   html,body{margin:0;height:100%;background:#eef7f5;color:#1d2321;
     font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif}
   .wrap{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:24px;box-sizing:border-box;text-align:center}
-  img{width:160px;height:160px;border-radius:36px;box-shadow:0 8px 24px rgba(15,110,102,.18)}
+  .wrap img{width:160px;height:160px;border-radius:36px;box-shadow:0 8px 24px rgba(15,110,102,.18)}
   h1{margin:0;font-size:26px}
   .go{display:inline-block;background:#0f6e66;color:#fff;text-decoration:none;font-weight:700;font-size:20px;padding:16px 40px;border-radius:14px}
   .muted{color:#5f6b67;font-size:15px;line-height:1.7}
   .card{background:#fff;border:1px solid #e2e0d8;border-radius:16px;padding:18px 22px;max-width:440px;text-align:left}
   .card ol{margin:8px 0 0;padding-left:1.4em}
   .hidden{display:none}
+  #app{position:fixed;left:0;right:0;bottom:0;top:env(safe-area-inset-top);width:100%;height:calc(100% - env(safe-area-inset-top));border:0;background:#f6f5f0}
 </style>
 </head>
 <body>
-<div class="wrap">
+<div class="wrap" id="intro">
   <img src="icon-512.png" alt="">
   <h1>発注管理</h1>
   <div id="setup" class="card hidden">
@@ -35,20 +39,49 @@
     </ol>
     <p class="muted" style="margin-bottom:0">追加したアイコンから開くと、アプリがすぐ開きます。</p>
   </div>
-  <a class="go" id="go" href="#">開く</a>
-  <div id="msg" class="muted">アプリを開いています…</div>
+  <a class="go" id="go" href="./">開く</a>
 </div>
 <script>
-  // 発注管理アプリ（Google Apps Script）の入口。中身はGoogle側にあり、合言葉がないと見られない
+  // 発注管理アプリ（Google Apps Script）の入口。中身はGoogle側にあり、合言葉がないと見られない。
+  // アプリをこのページの中に表示し、合言葉・拠点・担当者の記憶はこのページ（iPad側）に置く。
+  // GASの画面だけだと、iPadのSafariでは閉じるたびに記憶が消えてしまうため。
   var APP = 'https://script.google.com/macros/s/AKfycbyOgUfipcpPs1zzAVl-McE7goiVEuNC8UKoY-TJ-Zybf-L6vl7H2ihJvy0gJfHVvLwp/exec';
-  document.getElementById('go').href = APP;
+  var GAS_FRAME = /^https:\/\/[a-z0-9-]+\.googleusercontent\.com$/;
+  var PREFIX = 'ehd_order_';
+
+  function items() {
+    var o = {};
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k.indexOf(PREFIX) === 0) o[k] = localStorage.getItem(k);
+      }
+    } catch (e) {}
+    return o;
+  }
+  window.addEventListener('message', function (e) {
+    if (!GAS_FRAME.test(e.origin) || !e.data || !e.source) return;
+    var d = e.data;
+    if (d.ehdOrder === 'hello') {
+      e.source.postMessage({ ehdOrder: 'data', items: items() }, e.origin);
+    } else if (d.ehdOrder === 'set' && typeof d.k === 'string' && d.k.indexOf(PREFIX) === 0) {
+      try { localStorage.setItem(d.k, String(d.v)); } catch (err) {}
+    }
+  });
+
   if (/add|setup/.test(location.hash + location.search)) {
-    // 設定用に開いたとき：自動では移動せず、追加の手順を出す。ホーム画面には余計な記号のないURLで登録されるようにする
+    // 設定用に開いたとき：アプリは出さず、追加の手順を出す。ホーム画面には余計な記号のないURLで登録されるようにする
     document.getElementById('setup').classList.remove('hidden');
-    document.getElementById('msg').classList.add('hidden');
     history.replaceState(null, '', location.pathname);
   } else {
-    location.replace(APP);
+    try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
+    document.getElementById('intro').classList.add('hidden');
+    var f = document.createElement('iframe');
+    f.id = 'app';
+    f.src = APP;
+    f.setAttribute('allow', 'camera; clipboard-write; fullscreen');
+    f.title = '発注管理';
+    document.body.appendChild(f);
   }
 </script>
 </body>
